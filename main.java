@@ -23,6 +23,10 @@ class Cell {
         isFloor = true;
         isDoor = true;
     }
+    public void setWater() {
+        isWater = true;
+        System.out.println("It is now Water");
+    }
     public void toggleRock() {
         if (isFloor) {
             if (isRock) {
@@ -75,26 +79,16 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
     private int cellRow = -1;
     private int cellCol = -1;
 
-    // 각 셀에 대한 상태 2차원 배열
-    // 0: 기본
-    // 1: 바닥만 존재
-    // 2: 돌 존재 (자명히 바닥도 존재)
-    // 3: 물이 지나는 중
-    // 4: 문으로 이어짐 (자명히 바닥도 존재)
-    // 5: 돌을 다시 부수는 상태 -> 돌을 빼는 repaint() 할 때 필요
-    // 6: 물이 지나는
-
-    private int[][] gridState = new int[GRID_SIZE/CELL_SIZE][GRID_SIZE/CELL_SIZE];
-    private ArrayList<ArrayList<Cell>> cellState = new ArrayList<>();
+    protected ArrayList<ArrayList<Cell>> cellState = new ArrayList<>();
 
 
     public MyPanel() {
         // 패널 안에서 MouseListener 이용하기 위해서.
         addMouseMotionListener(this);
         addMouseListener(this);
-        for (int i = 0; i<GRID_SIZE/CELL_SIZE;i++) {
+        for (int i = 0; i < CELL_NUM;i++) {
             cellState.add(new ArrayList<Cell>());
-            for (int j = 0; j < GRID_SIZE/CELL_SIZE; j++) {
+            for (int j = 0; j < CELL_NUM; j++) {
                 cellState.get(i).add(new Cell(j, i));
             }
         }
@@ -107,90 +101,61 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
 
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
-        // 그리드 생성
-        g.setColor(new Color(0, 0, 0, 40)); // 색은 조금 더 투명하게 바꿔도 됨.. 자유
-        for (int i=0;i<=700;i+=50) {
-            g.drawLine(i, 0, i, 700);
-        }
-
-        for (int i=0;i<=700;i+=50) {
-            g.drawLine(0, i, 700, i);
-        }
+    
         // 현재 커서가 위치한 셀 색칠
         if (cellRow != -1 && cellCol != -1) {
             g.setColor(new Color(68, 138, 255, 50));
             int xCoord = cellCol * CELL_SIZE;
             int yCoord = cellRow * CELL_SIZE;
-            g.fillRect(xCoord+1, yCoord+1, CELL_SIZE-1, CELL_SIZE-1);
+            g.fillRect(xCoord+1, yCoord+1, CELL_SIZE, CELL_SIZE);
         }
-
-        // 바닥 생성
+        
+        // 각 셀마다 요소 생성
         for (int i = 0; i < CELL_NUM; i++) {
             for (int j = 0; j < CELL_NUM; j++) {
-
-                // switch (gridState[i][j]) {
-                //     // 문 생성
-                //     case 4:
-                //         g.setColor(Color.RED);
-                //         if (j == 0) 
-                //         g.fillRect(0, i*CELL_SIZE + 1, 4, CELL_SIZE);
-                //         else
-                //         g.fillRect(GRID_SIZE - 4, i*CELL_SIZE, 4, CELL_SIZE);
-                //         break;
-                //     // 돌 생성
-                //     case 2:
-                //         g.setColor(new Color(0, 0, 0, 80));
-                //         g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
-                //     // 돌 클릭하면 없애기
-                //     case 5:
-                //         g.setColor(Color.WHITE);
-                //         g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
-                //     // 바닥 생성
-                //     case 1:
-                //         g.setColor(Color.BLACK);
-                //         g.fillRect(j * CELL_SIZE + 1, (i+1) * CELL_SIZE - 2, CELL_SIZE, 3);
-                // }
+                System.out.print(cellState.get(i).get(j).isWater() + " ");
+                // 돌 생성
                 if (cellState.get(i).get(j).isRock()) {
                     g.setColor(new Color(0, 0, 0, 80));
-                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE-1, CELL_SIZE-1);
+                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
                 }
+                // 돌 소멸
                 else if (cellState.get(i).get(j).rockBroken()) {
                     g.setColor(new Color(238, 238, 238));
-                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE-1, CELL_SIZE-1);
+                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
                     cellState.get(i).get(j).resetCell();
-
+                    
                 }
                 // 문 생성
                 if (cellState.get(i).get(j).isDoor()) {
                     g.setColor(Color.RED);
                     if (j == 0) 
-                        g.fillRect(0, i*CELL_SIZE + 1, 4, CELL_SIZE);
+                    g.fillRect(0, i*CELL_SIZE + 1, 4, CELL_SIZE);
                     else
-                        g.fillRect(GRID_SIZE - 4, i*CELL_SIZE, 4, CELL_SIZE);
+                    g.fillRect(GRID_SIZE - 4, i*CELL_SIZE, 4, CELL_SIZE);
                 }
                 // 바닥 생성
                 if (cellState.get(i).get(j).isFloor()) {
                     g.setColor(Color.BLACK);
                     g.fillRect(j * CELL_SIZE + 1, (i+1) * CELL_SIZE - 2, CELL_SIZE, 3);
                 }
-                // if (gridState[i][j] == 4) {
-                //     g.setColor(Color.RED);
-                //     if (j == 0) 
-                //         g.fillRect(0, i*CELL_SIZE + 1, 4, CELL_SIZE);
-                //     else
-                //         g.fillRect(GRID_SIZE - 4, i*CELL_SIZE, 4, CELL_SIZE);
-                //     g.setColor(Color.BLACK);
-                //     g.fillRect(j * CELL_SIZE + 1, (i+1) * CELL_SIZE - 2, CELL_SIZE, 3);
-                // }
-                // else if (gridState[i][j] == 2) {
-                //     g.setColor(new Color(0, 0, 0, 80));
-                //     g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
-                // }
-                // if (gridState[i][j] == 1) {
-                //     g.setColor(Color.BLACK);
-                //     g.fillRect(j * CELL_SIZE + 1, (i+1) * CELL_SIZE - 2, CELL_SIZE, 3);
-                // }
+                // 물 생성
+                if (cellState.get(i).get(j).isWater()) {
+                    System.out.println("Is Water");
+                    g.setColor(Color.RED);
+                    g.fillRect(j * CELL_SIZE + 13, i * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
+                }
             }
+            System.out.println();
+        }
+        // 그리드 생성
+        g.setColor(new Color(0, 0, 0, 40)); // 색은 조금 더 투명하게 바꿔도 됨.. 자유
+        for (int i=0;i<=700;i+=50) {
+            g.drawLine(i, 0, i, 700);
+        }
+    
+        for (int i=0;i<=700;i+=50) {
+            g.drawLine(0, i, 700, i);
         }
     }
 
@@ -199,12 +164,12 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         // 실제 좌표 -> 셀 좌표
         int tempRow = e.getY() / CELL_SIZE;
         int tempCol = e.getX() / CELL_SIZE;
-
+        
         // 커서가 있는 셀이 바뀌지 않으면 굳이 다시 그리지 않음.
         if (tempRow != cellRow || tempCol != cellCol) {
             cellRow = tempRow;
             cellCol = tempCol;
-
+            
             repaint();
         }
     }
@@ -230,12 +195,7 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
     public void mouseReleased(MouseEvent e) {
         int tempRow = e.getY() / CELL_SIZE;
         int tempCol = e.getX() / CELL_SIZE;
-        // if (gridState[tempRow][tempCol] == 1) {
-        //     if (gridState[tempRow][tempCol] != 2)
-        //         gridState[tempRow][tempCol] = 2;
-        //     else
-        //         gridState[tempRow][tempCol] = 5;
-        // }
+
         Cell currentCell = cellState.get(tempRow).get(tempCol);
         if (currentCell.isFloor() && !currentCell.isDoor()) {
             currentCell.toggleRock();
@@ -244,6 +204,24 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
     }
     @Override
     public void mouseEntered(MouseEvent e) {}
+}
+
+class FlowWater extends MyPanel implements Runnable {
+    int start;
+    public FlowWater(int start) {
+        this.start = start;
+    }
+
+    public void run() {
+        try {
+            Thread.sleep(1000);
+            cellState.get(1).get(6).setWater();
+        }
+        catch (Exception e) {
+
+        }
+        System.out.println("FlowWater END");
+    }
 }
 
 class MapSelector {
@@ -288,6 +266,7 @@ class MapSelector {
 public class main {
     public static void main(String[] args) {
         Frame frame = new Frame();
-
+        Thread flow = new Thread(new FlowWater(7));
+        flow.start();
     }
 }

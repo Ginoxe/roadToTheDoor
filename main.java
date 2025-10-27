@@ -11,9 +11,6 @@ class Cell {
     private boolean isFloor = false;
     private boolean isDoor = false;
     private boolean isRock = false;
-    private boolean rockBroken = false;
-    private boolean isWater = false;
-    private int waterCount = 0;
     public Cell(int x, int y) {
         this.x = x;
         this.y = y;
@@ -25,24 +22,11 @@ class Cell {
         isFloor = true;
         isDoor = true;
     }
-    public void setWater() {
-        isWater = true;
+    public void setRock() {
+        isRock = true;
     }
-    public void removeWater() {
-        isWater = false;
-    }
-    public void toggleRock() {
-        if (isFloor) {
-            if (isRock) {
-                isRock = false;
-                rockBroken = true;
-            }
-            else
-                isRock = true;
-        }
-    }
-    public void resetCell() {
-        rockBroken = false;
+    public void removeRock() {
+        isRock = false;
     }
     public int getX() {
         return x;
@@ -58,12 +42,6 @@ class Cell {
     }
     public boolean isRock() {
         return isRock;
-    }
-    public boolean rockBroken() {
-        return rockBroken;
-    }
-    public boolean isWater() {
-        return isWater;
     }
 }
 
@@ -90,7 +68,10 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
     private int cellCol = -1;
 
     protected ArrayList<ArrayList<Cell>> cellState = new ArrayList<>();
-
+    protected ArrayList<Cell> rockCells = new ArrayList<>();
+    protected LinkedList<Cell> waterCells = new LinkedList<>();
+    protected ArrayList<Cell> doorCells = new ArrayList<>();
+    protected ArrayList<Cell> floorCells = new ArrayList<>();
 
     public MyPanel() {
         // 패널 안에서 MouseListener 이용하기 위해서.
@@ -102,7 +83,7 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
                 cellState.get(i).add(new Cell(j, i));
             }
         }
-        MapSelector.getNewMap(cellState);
+        MapSelector.getNewMap(cellState, floorCells, doorCells);
     }
 
     public Dimension getPreferredSize() {
@@ -120,41 +101,42 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
             g.fillRect(xCoord+1, yCoord+1, CELL_SIZE, CELL_SIZE);
         }
         
-        // 각 셀마다 요소 생성
-        for (int i = 0; i < CELL_NUM; i++) {
-            for (int j = 0; j < CELL_NUM; j++) {
-                // 돌 생성
-                if (cellState.get(i).get(j).isRock()) {
-                    g.setColor(new Color(0, 0, 0, 80));
-                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
-                }
-                // 돌 소멸
-                else if (cellState.get(i).get(j).rockBroken()) {
-                    g.setColor(new Color(238, 238, 238));
-                    g.fillRect(j*CELL_SIZE+1, i*CELL_SIZE+1, CELL_SIZE, CELL_SIZE);
-                    cellState.get(i).get(j).resetCell();
-                    
-                }
-                // 문 생성
-                if (cellState.get(i).get(j).isDoor()) {
-                    g.setColor(Color.RED);
-                    if (j == 0) 
-                    g.fillRect(0, i*CELL_SIZE + 1, 4, CELL_SIZE);
-                    else
-                    g.fillRect(GRID_SIZE - 4, i*CELL_SIZE, 4, CELL_SIZE);
-                }
-                // 바닥 생성
-                if (cellState.get(i).get(j).isFloor()) {
-                    g.setColor(Color.BLACK);
-                    g.fillRect(j * CELL_SIZE + 1, (i+1) * CELL_SIZE - 2, CELL_SIZE, 3);
-                }
-                // 물 생성
-                if (cellState.get(i).get(j).isWater()) {
-                    g.setColor(Color.RED);
-                    g.fillRect(j * CELL_SIZE + 13, i * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
-                }
-            }
+        // 돌 생성 및 소멸
+        for (int i = 0; i < rockCells.size(); i++) {
+            Cell cell = rockCells.get(i);
+            g.setColor(new Color(0,0,0,80));
+            int xCoord = cell.getX();
+            int yCoord = cell.getY();
+            g.fillRect(xCoord*CELL_SIZE + 1, yCoord*CELL_SIZE + 1, CELL_SIZE, CELL_SIZE);
         }
+        // 문 색칠
+        for (int i = 0; i < doorCells.size(); i++) {
+            Cell cell = doorCells.get(i);
+            g.setColor(Color.RED);
+            if (cell.getX() == 0) 
+                g.fillRect(0, cell.getY()*CELL_SIZE + 1, 4, CELL_SIZE);
+            else
+                g.fillRect(GRID_SIZE - 4, cell.getY()*CELL_SIZE, 4, CELL_SIZE);
+        }
+        // 바닥 색칠
+        for (int i = 0; i < floorCells.size(); i++) {
+            Cell cell = floorCells.get(i);
+            g.setColor(Color.BLACK);
+            g.fillRect(cell.getX() * CELL_SIZE + 1, (cell.getY()+1) * CELL_SIZE - 2, CELL_SIZE, 3);
+        }
+        // 물 흐르기
+        int alpha = 255 - (waterCells.size()-1) * 40;
+        for (int i = 0; i < waterCells.size(); i++) {
+            Cell cell = waterCells.get(i);
+            g.setColor(new Color(0, 0, 255, alpha));
+            // if (i == waterCells.size() - 1) // 머리만 색 바꾸기
+            //     g.setColor(Color.RED);
+            // else
+            //     g.setColor(new Color(255, 0, 0, 50));
+            g.fillRect(cell.getX() * CELL_SIZE + 13, cell.getY() * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
+            alpha += 40;
+        }
+
         // 그리드 생성
         g.setColor(new Color(0, 0, 0, 40)); // 색은 조금 더 투명하게 바꿔도 됨.. 자유
         for (int i=0;i<=700;i+=50) {
@@ -205,7 +187,14 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
 
         Cell currentCell = cellState.get(tempRow).get(tempCol);
         if (currentCell.isFloor() && !currentCell.isDoor()) {
-            currentCell.toggleRock();
+            if (rockCells.contains(currentCell)) {
+                currentCell.removeRock();
+                rockCells.remove(currentCell);
+            }
+            else {
+                currentCell.setRock();
+                rockCells.add(currentCell);
+            }
             repaint();
         }
     }
@@ -217,18 +206,19 @@ class FlowWater implements Runnable {
     int start;
     MyPanel panel;
     private final int maxLength = 6;
-    private Queue<Cell> waterQueue = new LinkedList<>();
+    Queue<Cell> waterQueue;
 
     public FlowWater(MyPanel panel, int start) {
         this.panel = panel;
         this.start = start;
+        waterQueue = panel.waterCells;
     }
     
     public void run() {
         try {
             Thread.sleep(1000); 
             Cell currentHead = panel.cellState.get(0).get(start);
-            currentHead.setWater();
+            // currentHead.setWater();
             waterQueue.offer(currentHead);
             panel.repaint();
             Thread.sleep(100);
@@ -271,14 +261,11 @@ class FlowWater implements Runnable {
                     }
                 }
                 if (waterQueue.size() == maxLength) {
-                    Cell tail = waterQueue.poll();
-                    tail.removeWater();
+                    waterQueue.poll();
                 }
-                currentHead.setWater();
                 waterQueue.offer(currentHead);
-                System.out.println(waterQueue);
                 panel.repaint();
-                Thread.sleep(1000);
+                Thread.sleep(150);
             }
         }
         catch (Exception e) {
@@ -290,40 +277,28 @@ class FlowWater implements Runnable {
 
 class MapSelector {
     static int mapType;
-    public static void getNewMap(ArrayList<ArrayList<Cell>> gridState) {
+    public static void getNewMap(ArrayList<ArrayList<Cell>> gridState, ArrayList<Cell> floorCells, ArrayList<Cell> doorCells) {
         mapType = (int)Math.random();
         if (mapType == 0) {
-            for (int i = 5; i<10; i++) {
-                gridState.get(2).get(i).setFloor();
+            int array[][] = {{3, 1}, {4, 1}, {5, 1}, {6, 1}, {7, 1}, {7, 3}, {8, 3}, {9, 3}, {9, 5},
+                             {10, 5}, {11, 5}, {12, 5}, {13, 5}, {5, 4}, {6, 4}, {7, 4}, {4, 4}, {1, 5}, 
+                             {2, 5}, {2, 8}, {3, 8}, {4, 8}, {5, 8}, {5, 7}, {6, 7}, {7, 7}, {8, 7}, 
+                             {9, 7}, {10, 8}, {11, 8}, {12, 8}, {13, 8}, {8, 11}, {9, 11}, {10, 11}, 
+                             {11, 13}, {12, 13}, {13, 13}, {2, 13}, {3, 13}, {1, 13}, {0, 13}, {1, 11}, 
+                             {2, 11}, {5, 12}, {6, 12}, {4, 12}, {6, 10}, {7, 10}, {0, 7}, {1, 7}, 
+                             {10, 2}, {11, 2}, {12, 2}, {13, 2}, {0, 11}};
+            for (int i = 0; i < array.length; i++) {
+                Cell cell = gridState.get(array[i][1]).get(array[i][0]);
+                cell.setFloor();
+                floorCells.add(cell);
             }
-            for (int i = 9;i<14;i++) {
-                gridState.get(4).get(i).setFloor();
+            int arr[][] = {{0, 11}, {13, 8}, {0, 13}, {13, 13}};
+            for (int i = 0; i< arr.length; i++) {
+                Cell cell = gridState.get(arr[i][1]).get(arr[i][0]);
+                cell.setDoor();
+                doorCells.add(cell);
             }
-            for (int i = 2; i< 6;i++) {
-                gridState.get(5).get(i).setFloor();
-            }
-            for (int i = 4; i < 10; i++) {
-                gridState.get(7).get(i).setFloor();
-            }
-            for (int i = 3; i < 6; i++) {
-                gridState.get(9).get(i).setFloor();
-            }
-            for (int i = 9; i < 12; i++) 
-                gridState.get(9).get(i).setFloor();
-            for (int i = 3; i < 11; i++)
-                gridState.get(12).get(i).setFloor();
-            for (int i = 0, j = 11; i < 3 && j < 14; i++, j++) {
-                gridState.get(11).get(i).setFloor();
-                gridState.get(11).get(j).setFloor();
-            }
-            for (int i = 0, j = 11; i < 3 && j < 14; i++, j++) {
-                gridState.get(13).get(i).setFloor();
-                gridState.get(13).get(j).setFloor();
-            }
-            gridState.get(11).get(0).setDoor();
-            gridState.get(11).get(13).setDoor();
-            gridState.get(13).get(0).setDoor();
-            gridState.get(13).get(13).setDoor();
+
         }
     }
     public static int getLongDirection(ArrayList<ArrayList<Cell>> gridState, Cell currentCell, int cellNum) {
@@ -352,11 +327,11 @@ class MapSelector {
     }
 }
 
-public class main {
+public class test {
     public static void main(String[] args) {
         MyPanel mainPanel = new MyPanel();
         Frame frame = new Frame(mainPanel);
-        Thread flow = new Thread(new FlowWater(mainPanel, 6));
+        Thread flow = new Thread(new FlowWater(mainPanel, 4));
         flow.start();
     }
 }

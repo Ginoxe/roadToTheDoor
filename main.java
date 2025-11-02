@@ -128,23 +128,24 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         int alpha = 255 - (waterCells.size()-1) * 40;
         for (int i = 0; i < waterCells.size(); i++) {
             Cell cell = waterCells.get(i);
-            g.setColor(new Color(0, 0, 255, alpha));
+            g.setColor(new Color(100, 255, 140, alpha));
             // if (i == waterCells.size() - 1) // 머리만 색 바꾸기
             //     g.setColor(Color.RED);
             // else
             //     g.setColor(new Color(255, 0, 0, 50));
-            g.fillRect(cell.getX() * CELL_SIZE + 13, cell.getY() * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
+            // g.fillRect(cell.getX() * CELL_SIZE + 13, cell.getY() * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
+            g.fillRect(cell.getX() * CELL_SIZE + (CELL_SIZE/4+1), cell.getY() * CELL_SIZE + (CELL_SIZE/4+1), CELL_SIZE/2, CELL_SIZE/2);
             alpha += 40;
         }
 
         // 그리드 생성
         g.setColor(new Color(0, 0, 0, 40)); // 색은 조금 더 투명하게 바꿔도 됨.. 자유
-        for (int i=0;i<=700;i+=50) {
-            g.drawLine(i, 0, i, 700);
+        for (int i=0; i <= GRID_SIZE; i += CELL_SIZE) {
+            g.drawLine(i, 0, i, GRID_SIZE);
         }
     
-        for (int i=0;i<=700;i+=50) {
-            g.drawLine(0, i, 700, i);
+        for (int i=0; i <= GRID_SIZE; i += CELL_SIZE) {
+            g.drawLine(0, i, GRID_SIZE, i);
         }
     }
 
@@ -186,7 +187,7 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         int tempCol = e.getX() / CELL_SIZE;
 
         Cell currentCell = cellState.get(tempRow).get(tempCol);
-        if (currentCell.isFloor() && !currentCell.isDoor()) {
+        if (currentCell.isFloor() && !currentCell.isDoor() && !waterCells.contains(currentCell)) {
             if (rockCells.contains(currentCell)) {
                 currentCell.removeRock();
                 rockCells.remove(currentCell);
@@ -205,7 +206,9 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
 class FlowWater implements Runnable {
     int start;
     MyPanel panel;
-    private final int maxLength = 6;
+    private final int delay = 1000; // 시작하기 전에 기다리는 시간(ms)
+    private final int maxLength = 6; // 잔상의 길이
+    private final int interval = 100; // 움직임 간의 시간 간격(ms) -> 속도와 반비례
     Queue<Cell> waterQueue;
 
     public FlowWater(MyPanel panel, int start) {
@@ -216,18 +219,20 @@ class FlowWater implements Runnable {
     
     public void run() {
         try {
-            Thread.sleep(1000); 
+            Thread.sleep(delay); 
             Cell currentHead = panel.cellState.get(0).get(start);
             // currentHead.setWater();
             waterQueue.offer(currentHead);
             panel.repaint();
-            Thread.sleep(100);
             boolean initialFall = true;
             int direction = 0;
+
             while(true) {
+                Thread.sleep(interval);
                 int x = currentHead.getX();
                 int y = currentHead.getY();
                 if (currentHead.isFloor()) {
+                    // 바닥에 떨어졌을 때 방향 정하기
                     if (initialFall) {
                         direction = MapSelector.getLongDirection(panel.cellState, currentHead, MyPanel.CELL_NUM); // -1: 왼쪽, 0: 동일, 1: 오른쪽
                         // direction이 0이면 랜덤으로 1이나 -1로 배정
@@ -237,24 +242,47 @@ class FlowWater implements Runnable {
                         }
                         initialFall = false;
                     }
-
+                    // 별개로 양쪽 벽에 위치한 경우 안 나가게 방향 보정
                     if (x == 0 && direction == -1) {
                         direction = 1;
                     }
                     else if (x == MyPanel.CELL_NUM-1 && direction == 1) {
                         direction = -1;
                     }
-
-                    if (direction == 1)
-                        currentHead = panel.cellState.get(y).get(x+1);
-                    else
-                        currentHead = panel.cellState.get(y).get(x-1);
+                    // 방향에 따라서 다음 칸 선택
+                    if (direction == 1){
+                        Cell nextCell = panel.cellState.get(y).get(x+1);
+                        if (nextCell.isRock()) {
+                            nextCell.removeRock();
+                            panel.rockCells.remove(nextCell);
+                            direction = -1;
+                        }
+                        else {
+                            currentHead = nextCell;
+                        }
+                    }
+                    else {
+                        Cell nextCell = panel.cellState.get(y).get(x-1);
+                        if (nextCell.isRock()) {
+                            nextCell.removeRock();
+                            panel.rockCells.remove(nextCell);
+                            direction = 1;
+                        }
+                        else {
+                            currentHead = nextCell;
+                        }
+                    }
 
                 }
                 else {
                     initialFall = true;
-                    if (y < MyPanel.CELL_NUM-1)
+                    if (y < MyPanel.CELL_NUM-1) {
                         currentHead = panel.cellState.get(y+1).get(x);
+                        if (currentHead.isRock()) {
+                            currentHead.removeRock();
+                            panel.rockCells.remove(currentHead);
+                        }
+                    }
                     else {
                         System.out.println("GAME OVER");
                         break;
@@ -265,7 +293,6 @@ class FlowWater implements Runnable {
                 }
                 waterQueue.offer(currentHead);
                 panel.repaint();
-                Thread.sleep(150);
             }
         }
         catch (Exception e) {

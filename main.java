@@ -1,10 +1,14 @@
 import javax.swing.*;
+import javax.swing.border.Border;
+
 import java.awt.*;
 import java.awt.event.*;
 import java.lang.Math;
 import java.util.ArrayList;
 import java.util.Queue;
 import java.util.LinkedList;
+import java.util.concurrent.Semaphore;
+
 
 class Cell {
     private int x, y;
@@ -53,18 +57,51 @@ class Cell {
 }
 
 class Frame extends JFrame {
-    public Frame(MyPanel panel) {
+    MainPanel mainPanel = new MainPanel();
+    TimerPanel timerPanel = new TimerPanel();
+    MidPanel midPanel;
+    RockPanel rockPanel;
+    ScorePanel scorePanel;
+    CardLayout cardLayout = new CardLayout();
+    JPanel panelContainer = new JPanel(cardLayout);
+    public Frame() {
         super("Layout Test");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
-        setContentPane(panel);
+        setLayout(new BorderLayout());
+        
+        Semaphore nextRound = new Semaphore(0);
+        Semaphore roundEnd = new Semaphore(0);
+        GameManager gm = new GameManager(this, nextRound, roundEnd);
+        rockPanel = new RockPanel(mainPanel, roundEnd);
+        scorePanel = new ScorePanel(mainPanel, gm);
+        
+        JPanel utilityPanel = new JPanel(new BorderLayout());
+        utilityPanel.add(scorePanel, BorderLayout.WEST);
+        utilityPanel.add(timerPanel, BorderLayout.CENTER);
+        utilityPanel.add(rockPanel, BorderLayout.EAST);
+
+        // 파넬 보관함에 두 파넬 추가
+        midPanel = new MidPanel(nextRound);
+        panelContainer.add(mainPanel, "Game");
+        panelContainer.add(midPanel, "Transition");
+        add(panelContainer, BorderLayout.CENTER);
+        add(utilityPanel, BorderLayout.NORTH);
+
         pack();
         setLocationRelativeTo(null);
         setVisible(true);
+
+        Thread gmThread = new Thread(gm);
+        gmThread.start();
+        Thread rockCounter = new Thread(rockPanel);
+        rockCounter.start();
+        Thread scoreCounter = new Thread(scorePanel);
+        scoreCounter.start();
     }
 
 }
 
-class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
+class MainPanel extends JPanel implements MouseMotionListener, MouseListener {
     static final int GRID_SIZE = 700;
     static final int CELL_SIZE = 50;
     static final int CELL_NUM = GRID_SIZE / CELL_SIZE;
@@ -74,16 +111,22 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
     private int cellRow = -1;
     private int cellCol = -1;
 
+    static final int maxRocks = 5;
     protected ArrayList<ArrayList<Cell>> cellState = new ArrayList<>();
     protected ArrayList<Cell> rockCells = new ArrayList<>();
     protected LinkedList<Cell> waterCells = new LinkedList<>();
     protected ArrayList<Cell> doorCells = new ArrayList<>();
     protected ArrayList<Cell> floorCells = new ArrayList<>();
 
-    public MyPanel() {
+    public MainPanel() {
         // 패널 안에서 MouseListener 이용하기 위해서.
         addMouseMotionListener(this);
         addMouseListener(this);
+        initializeGrid();
+    }
+
+    private void initializeGrid() {
+        cellState.clear();
         for (int i = 0; i < CELL_NUM;i++) {
             cellState.add(new ArrayList<Cell>());
             for (int j = 0; j < CELL_NUM; j++) {
@@ -93,8 +136,17 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         MapSelector.getNewMap(cellState, floorCells, doorCells);
     }
 
+    public void reset() {
+        rockCells.clear();
+        waterCells.clear();
+        doorCells.clear();
+        floorCells.clear();
+        initializeGrid();
+        repaint();
+    }
+
     public Dimension getPreferredSize() {
-        return new Dimension(GRID_SIZE+1, GRID_SIZE+10);
+        return new Dimension(GRID_SIZE+1, GRID_SIZE+1);
     }
 
     public void paintComponent(Graphics g) {
@@ -200,8 +252,10 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
                 rockCells.remove(currentCell);
             }
             else {
-                currentCell.setRock();
-                rockCells.add(currentCell);
+                if (rockCells.size() < maxRocks) {
+                    currentCell.setRock();
+                    rockCells.add(currentCell);
+                }
             }
             repaint();
         }
@@ -212,22 +266,22 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
 
 class FlowWater implements Runnable {
     int start;
-    MyPanel panel;
-    private final int delay = 1000; // 시작하기 전에 기다리는 시간(ms)
+    MainPanel panel;
+    GameManager gm;
     private final int maxLength = 6; // 잔상의 길이
     private final int interval = 100; // 움직임 간의 시간 간격(ms) -> 속도와 반비례
     Queue<Cell> waterQueue;
     boolean isDone = false;
 
-    public FlowWater(MyPanel panel, int start) {
+    public FlowWater(MainPanel panel, int start, GameManager gm) {
         this.panel = panel;
         this.start = start;
+        this.gm = gm;
         waterQueue = panel.waterCells;
     }
     
     public void run() {
         try {
-            Thread.sleep(delay); 
             Cell currentHead = panel.cellState.get(0).get(start);
             // currentHead.setWater();
             waterQueue.offer(currentHead);
@@ -243,7 +297,7 @@ class FlowWater implements Runnable {
                     if (currentHead.isFloor()) {
                         // 바닥에 떨어졌을 때 방향 정하기
                         if (initialFall) {
-                            direction = MapSelector.getLongDirection(panel.cellState, currentHead, MyPanel.CELL_NUM); // -1: 왼쪽, 0: 동일, 1: 오른쪽
+                            direction = MapSelector.getLongDirection(panel.cellState, currentHead, MainPanel.CELL_NUM); // -1: 왼쪽, 0: 동일, 1: 오른쪽
                             // direction이 0이면 랜덤으로 1이나 -1로 배정
                             if (direction == 0) {
                                 int random = (int)(Math.random()*2);
@@ -256,7 +310,7 @@ class FlowWater implements Runnable {
                             if (currentHead.isDoor()) {
                                 isDone = true;
                                 if (currentHead.isCorrectDoor()) {
-                                    System.out.println("CORRECT!");
+                                    gm.score++;
                                 }
                                 else {
                                     System.out.println("FAILED");
@@ -265,11 +319,11 @@ class FlowWater implements Runnable {
                             }
                             direction = 1;
                         }
-                        else if (x == MyPanel.CELL_NUM-1 && direction == 1) {
+                        else if (x == MainPanel.CELL_NUM-1 && direction == 1) {
                             if (currentHead.isDoor()) {
                                 isDone = true;
                                 if (currentHead.isCorrectDoor()) {
-                                    System.out.println("CORRECT!");
+                                    gm.score++;
                                 }
                                 else {
                                     System.out.println("FAILED");
@@ -305,7 +359,7 @@ class FlowWater implements Runnable {
                     }
                     else {
                         initialFall = true;
-                        if (y < MyPanel.CELL_NUM-1) {
+                        if (y < MainPanel.CELL_NUM-1) {
                             currentHead = panel.cellState.get(y+1).get(x);
                             if (currentHead.isRock()) {
                                 currentHead.removeRock();
@@ -313,8 +367,9 @@ class FlowWater implements Runnable {
                             }
                         }
                         else {
+                            isDone = true;
                             System.out.println("GAME OVER");
-                            break;
+                            continue;
                         }
                     }
                     if (waterQueue.size() == maxLength) {
@@ -326,6 +381,9 @@ class FlowWater implements Runnable {
                 else {
                     waterQueue.poll();
                     panel.repaint();
+                }
+                if (waterQueue.isEmpty()) {
+                    break;
                 }
             }
         }
@@ -390,11 +448,175 @@ class MapSelector {
     }
 }
 
+class RockPanel extends JPanel implements Runnable {
+    private JLabel remainingRocksLabel;
+    private MainPanel mainPanel;
+    Semaphore roundEnd;
+    public RockPanel(MainPanel mainPanel, Semaphore roundEnd) {
+        setBackground(Color.LIGHT_GRAY);
+        this.mainPanel = mainPanel;
+        this.roundEnd = roundEnd;
+
+        remainingRocksLabel = new JLabel(mainPanel.rockCells.size() + "");
+        remainingRocksLabel.setFont(new Font("TimesRoman", Font.BOLD, 20));
+        add(remainingRocksLabel);
+    }
+
+    public Dimension getPreferredSize() {
+        return new Dimension(200, 80);
+    }
+
+    public void run() {
+        while (true) {
+            try {
+                remainingRocksLabel.setText("Remaining Rocks: " + (MainPanel.maxRocks - mainPanel.rockCells.size()));
+                if (roundEnd.tryAcquire()) {
+                    remainingRocksLabel.setText("");
+                    break;
+                }
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+class ScorePanel extends JPanel implements Runnable {
+    private JLabel label;
+    private MainPanel mainPanel;
+    private GameManager gm;
+    public ScorePanel(MainPanel mainPanel, GameManager gm) {
+        setLayout(null);
+        setBackground(Color.LIGHT_GRAY);
+        this.mainPanel = mainPanel;
+        this.gm = gm;
+        label = new JLabel("Score: " + gm.score);
+        label.setFont(new Font("TimesRoman", Font.BOLD, 20));
+        label.setBounds(5,0,80,30);
+        add(label);
+    }
+
+    public Dimension getPreferredSize() {
+        return new Dimension(200, 80);
+    }
+
+    public void run() {
+        while (true) {
+            try {
+                label.setText("Score: " + gm.score);
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+class TimerPanel extends JPanel implements Runnable {
+    private JLabel label;
+    private int timer = 5;
+    public TimerPanel() {
+        setBackground(Color.GRAY);
+        label = new JLabel(timer + "");
+        label.setFont(new Font("TimesRoman", Font.ITALIC, 50));
+        label.setHorizontalAlignment((JLabel.CENTER));
+        add(label);
+    }
+
+    public void run() {
+        while (true) {
+            try {
+                label.setText(timer + "");
+                Thread.sleep(1000);
+                timer--;
+                if (timer == 0) {
+                    label.setText("");
+                    timer = 5;
+                    break;
+                }
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
+class MidPanel extends JPanel {
+    public MidPanel(Semaphore nextRound) {
+        setLayout(null);
+        JButton nextRoundButton = new JButton("Next Round");
+        nextRoundButton.setBounds(MainPanel.GRID_SIZE/2-200, (MainPanel.GRID_SIZE-80)/2-75, 400, 150);
+        nextRoundButton.setFont(new Font("TimesRoman", Font.BOLD, 50));
+        add(nextRoundButton);
+        nextRoundButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                nextRound.release();
+                System.out.println("PRESSED BUTTON");
+            }
+        });
+    }
+
+    public Dimension getPreferredSize() {
+        return new Dimension(MainPanel.GRID_SIZE+1, MainPanel.GRID_SIZE+10);
+    }
+}
+
+class GameManager implements Runnable {
+    Frame frame;
+    Semaphore nextRound;
+    Semaphore roundEnd;
+    int score = 0;
+    
+    public GameManager(Frame frame, Semaphore nextRound, Semaphore roundEnd) {
+        this.frame = frame;
+        this.nextRound = nextRound;
+        this.roundEnd = roundEnd;
+        // 카드 레이아웃으로 화면 전환
+
+
+    }
+    
+    public void run() {
+        while (true) {
+            try {
+                // 실제로 게임을 진행하는 부분
+                frame.cardLayout.show(frame.panelContainer, "Game");
+
+                frame.mainPanel.reset();
+
+                Thread timer = new Thread(frame.timerPanel);
+                timer.start();
+                try {
+                    timer.join();
+                }
+                catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                Thread flow = new Thread(new FlowWater(frame.mainPanel, 4, this));
+                flow.start();
+                try {
+                    flow.join();
+                }
+                catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                frame.cardLayout.show(frame.panelContainer, "Transition");
+                roundEnd.release();
+                nextRound.acquire();
+            }
+            catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+}
+
 public class main {
     public static void main(String[] args) {
-        MyPanel mainPanel = new MyPanel();
-        Frame frame = new Frame(mainPanel);
-        Thread flow = new Thread(new FlowWater(mainPanel, 4));
-        flow.start();
+        new Frame(); // START GAME
     }
 }

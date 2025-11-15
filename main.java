@@ -10,10 +10,17 @@ class Cell {
     private int x, y;
     private boolean isFloor = false;
     private boolean isDoor = false;
+    private boolean isCorrectDoor = false;
     private boolean isRock = false;
     public Cell(int x, int y) {
         this.x = x;
         this.y = y;
+    }
+    public void setCorrectDoor() {
+        isCorrectDoor = true;
+    }
+    public boolean isCorrectDoor() {
+        return isCorrectDoor;
     }
     public void setFloor() {
         isFloor = true;
@@ -112,7 +119,12 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         // 문 색칠
         for (int i = 0; i < doorCells.size(); i++) {
             Cell cell = doorCells.get(i);
-            g.setColor(Color.RED);
+            if (cell.isCorrectDoor()) {
+                g.setColor(Color.GREEN);
+            }
+            else {
+                g.setColor(Color.RED);
+            }
             if (cell.getX() == 0) 
                 g.fillRect(0, cell.getY()*CELL_SIZE + 1, 4, CELL_SIZE);
             else
@@ -129,11 +141,6 @@ class MyPanel extends JPanel implements MouseMotionListener, MouseListener {
         for (int i = 0; i < waterCells.size(); i++) {
             Cell cell = waterCells.get(i);
             g.setColor(new Color(100, 255, 140, alpha));
-            // if (i == waterCells.size() - 1) // 머리만 색 바꾸기
-            //     g.setColor(Color.RED);
-            // else
-            //     g.setColor(new Color(255, 0, 0, 50));
-            // g.fillRect(cell.getX() * CELL_SIZE + 13, cell.getY() * CELL_SIZE + 13, CELL_SIZE/2, CELL_SIZE/2);
             g.fillRect(cell.getX() * CELL_SIZE + (CELL_SIZE/4+1), cell.getY() * CELL_SIZE + (CELL_SIZE/4+1), CELL_SIZE/2, CELL_SIZE/2);
             alpha += 40;
         }
@@ -210,6 +217,7 @@ class FlowWater implements Runnable {
     private final int maxLength = 6; // 잔상의 길이
     private final int interval = 100; // 움직임 간의 시간 간격(ms) -> 속도와 반비례
     Queue<Cell> waterQueue;
+    boolean isDone = false;
 
     public FlowWater(MyPanel panel, int start) {
         this.panel = panel;
@@ -229,70 +237,96 @@ class FlowWater implements Runnable {
 
             while(true) {
                 Thread.sleep(interval);
-                int x = currentHead.getX();
-                int y = currentHead.getY();
-                if (currentHead.isFloor()) {
-                    // 바닥에 떨어졌을 때 방향 정하기
-                    if (initialFall) {
-                        direction = MapSelector.getLongDirection(panel.cellState, currentHead, MyPanel.CELL_NUM); // -1: 왼쪽, 0: 동일, 1: 오른쪽
-                        // direction이 0이면 랜덤으로 1이나 -1로 배정
-                        if (direction == 0) {
-                            int random = (int)(Math.random()*2);
-                            direction = random==0 ? 1 : -1;
+                if (!isDone) {
+                    int x = currentHead.getX();
+                    int y = currentHead.getY();
+                    if (currentHead.isFloor()) {
+                        // 바닥에 떨어졌을 때 방향 정하기
+                        if (initialFall) {
+                            direction = MapSelector.getLongDirection(panel.cellState, currentHead, MyPanel.CELL_NUM); // -1: 왼쪽, 0: 동일, 1: 오른쪽
+                            // direction이 0이면 랜덤으로 1이나 -1로 배정
+                            if (direction == 0) {
+                                int random = (int)(Math.random()*2);
+                                direction = random==0 ? 1 : -1;
+                            }
+                            initialFall = false;
                         }
-                        initialFall = false;
-                    }
-                    // 별개로 양쪽 벽에 위치한 경우 안 나가게 방향 보정
-                    if (x == 0 && direction == -1) {
-                        direction = 1;
-                    }
-                    else if (x == MyPanel.CELL_NUM-1 && direction == 1) {
-                        direction = -1;
-                    }
-                    // 방향에 따라서 다음 칸 선택
-                    if (direction == 1){
-                        Cell nextCell = panel.cellState.get(y).get(x+1);
-                        if (nextCell.isRock()) {
-                            nextCell.removeRock();
-                            panel.rockCells.remove(nextCell);
-                            direction = -1;
-                        }
-                        else {
-                            currentHead = nextCell;
-                        }
-                    }
-                    else {
-                        Cell nextCell = panel.cellState.get(y).get(x-1);
-                        if (nextCell.isRock()) {
-                            nextCell.removeRock();
-                            panel.rockCells.remove(nextCell);
+                        // 별개로 양쪽 벽에 위치한 경우 안 나가게 방향 보정
+                        if (x == 0 && direction == -1) {
+                            if (currentHead.isDoor()) {
+                                isDone = true;
+                                if (currentHead.isCorrectDoor()) {
+                                    System.out.println("CORRECT!");
+                                }
+                                else {
+                                    System.out.println("FAILED");
+                                }
+                                continue;
+                            }
                             direction = 1;
                         }
+                        else if (x == MyPanel.CELL_NUM-1 && direction == 1) {
+                            if (currentHead.isDoor()) {
+                                isDone = true;
+                                if (currentHead.isCorrectDoor()) {
+                                    System.out.println("CORRECT!");
+                                }
+                                else {
+                                    System.out.println("FAILED");
+                                }
+                                continue;
+                            }
+                            direction = -1;
+                        }
+                        // 방향에 따라서 다음 칸 선택
+                        if (direction == 1){
+                            Cell nextCell = panel.cellState.get(y).get(x+1);
+                            if (nextCell.isRock()) {
+                                nextCell.removeRock();
+                                panel.rockCells.remove(nextCell);
+                                direction = -1;
+                            }
+                            else {
+                                currentHead = nextCell;
+                            }
+                        }
                         else {
-                            currentHead = nextCell;
+                            Cell nextCell = panel.cellState.get(y).get(x-1);
+                            if (nextCell.isRock()) {
+                                nextCell.removeRock();
+                                panel.rockCells.remove(nextCell);
+                                direction = 1;
+                            }
+                            else {
+                                currentHead = nextCell;
+                            }
                         }
-                    }
-
-                }
-                else {
-                    initialFall = true;
-                    if (y < MyPanel.CELL_NUM-1) {
-                        currentHead = panel.cellState.get(y+1).get(x);
-                        if (currentHead.isRock()) {
-                            currentHead.removeRock();
-                            panel.rockCells.remove(currentHead);
-                        }
+    
                     }
                     else {
-                        System.out.println("GAME OVER");
-                        break;
+                        initialFall = true;
+                        if (y < MyPanel.CELL_NUM-1) {
+                            currentHead = panel.cellState.get(y+1).get(x);
+                            if (currentHead.isRock()) {
+                                currentHead.removeRock();
+                                panel.rockCells.remove(currentHead);
+                            }
+                        }
+                        else {
+                            System.out.println("GAME OVER");
+                            break;
+                        }
                     }
+                    if (waterQueue.size() == maxLength) {
+                        waterQueue.poll();
+                    }
+                    waterQueue.offer(currentHead);
+                    panel.repaint();
                 }
-                if (waterQueue.size() == maxLength) {
+                else {
                     waterQueue.poll();
+                    panel.repaint();
                 }
-                waterQueue.offer(currentHead);
-                panel.repaint();
             }
         }
         catch (Exception e) {
@@ -325,7 +359,9 @@ class MapSelector {
                 cell.setDoor();
                 doorCells.add(cell);
             }
-
+            int randNum = (int)(Math.random() * 4);
+            Cell correctDoor = gridState.get(arr[randNum][1]).get(arr[randNum][0]);
+            correctDoor.setCorrectDoor();
         }
     }
     public static int getLongDirection(ArrayList<ArrayList<Cell>> gridState, Cell currentCell, int cellNum) {

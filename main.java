@@ -1,8 +1,12 @@
 import javax.swing.*;
 import javax.swing.border.Border;
+import javax.imageio.ImageIO;
+import java.io.IOException;
+import java.io.File;
 
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.image.BufferedImage;
 import java.lang.Math;
 import java.util.ArrayList;
 import java.util.Queue;
@@ -118,11 +122,20 @@ class MainPanel extends JPanel implements MouseMotionListener, MouseListener {
     protected ArrayList<Cell> doorCells = new ArrayList<>();
     protected ArrayList<Cell> floorCells = new ArrayList<>();
 
+    BufferedImage rockImage;
+
     public MainPanel() {
         // 패널 안에서 MouseListener 이용하기 위해서.
         addMouseMotionListener(this);
         addMouseListener(this);
         initializeGrid();
+
+        try {
+            rockImage = ImageIO.read(new File("C:\\Main\\Develop\\javaGame\\Images\\rock.png"));
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void initializeGrid() {
@@ -166,7 +179,9 @@ class MainPanel extends JPanel implements MouseMotionListener, MouseListener {
             g.setColor(new Color(0,0,0,80));
             int xCoord = cell.getX();
             int yCoord = cell.getY();
-            g.fillRect(xCoord*CELL_SIZE + 1, yCoord*CELL_SIZE + 1, CELL_SIZE, CELL_SIZE);
+            // g.fillRect(xCoord*CELL_SIZE + 1, yCoord*CELL_SIZE + 1, CELL_SIZE, CELL_SIZE);
+
+            g.drawImage(rockImage, xCoord*CELL_SIZE + 1, yCoord*CELL_SIZE + 1, CELL_SIZE, CELL_SIZE, this);
         }
         // 문 색칠
         for (int i = 0; i < doorCells.size(); i++) {
@@ -313,7 +328,7 @@ class FlowWater implements Runnable {
                                     gm.score++;
                                 }
                                 else {
-                                    System.out.println("FAILED");
+                                    gm.lives--;
                                 }
                                 continue;
                             }
@@ -326,7 +341,7 @@ class FlowWater implements Runnable {
                                     gm.score++;
                                 }
                                 else {
-                                    System.out.println("FAILED");
+                                    gm.lives--;
                                 }
                                 continue;
                             }
@@ -368,7 +383,7 @@ class FlowWater implements Runnable {
                         }
                         else {
                             isDone = true;
-                            System.out.println("GAME OVER");
+                            gm.lives--;
                             continue;
                         }
                     }
@@ -486,6 +501,7 @@ class RockPanel extends JPanel implements Runnable {
 class ScorePanel extends JPanel implements Runnable {
     private JLabel label;
     private GameManager gm;
+    private BufferedImage heartImage;
     public ScorePanel(GameManager gm) {
         setLayout(null);
         this.gm = gm;
@@ -493,16 +509,35 @@ class ScorePanel extends JPanel implements Runnable {
         label.setFont(new Font("TimesRoman", Font.BOLD, 20));
         label.setBounds(5,0,80,30);
         add(label);
+
+        try {
+            heartImage = ImageIO.read(new File("C:\\Main\\Develop\\javaGame\\Images\\heart.png"));
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public Dimension getPreferredSize() {
         return new Dimension(200, 80);
     }
 
+    public void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        for (int i = 0;i<gm.lives;i++) {
+            int x = 5 + i * 20;
+            g.drawImage(heartImage, x, 30, 20, 20, this);
+        }
+        if (heartImage != null) {
+        }
+
+    }
     public void run() {
         while (true) {
             try {
                 label.setText("Score: " + gm.score);
+                repaint();
             }
             catch (Exception e) {
                 e.printStackTrace();
@@ -567,6 +602,7 @@ class GameManager implements Runnable {
     Semaphore nextRound;
     Semaphore roundEnd;
     int score = 0;
+    int lives = 3;
     
     public GameManager(Frame frame, Semaphore nextRound, Semaphore roundEnd) {
         this.frame = frame;
@@ -602,9 +638,15 @@ class GameManager implements Runnable {
                 catch (Exception e) {
                     e.printStackTrace();
                 }
-
-                frame.cardLayout.show(frame.panelContainer, "Transition");
+                
                 roundEnd.release();
+
+                if(lives>0) {
+                    frame.cardLayout.show(frame.panelContainer, "Transition");
+                }
+                else { // 목숨 다 사라지고 다음 화면으로 전환
+                    System.out.println("GAME OVER");
+                }
                 nextRound.acquire();
             }
             catch (Exception e) {

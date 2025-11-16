@@ -65,15 +65,15 @@ class Frame extends JFrame {
     CardLayout cardLayout = new CardLayout();
     JPanel panelContainer = new JPanel(cardLayout);
     public Frame() {
-        super("Layout Test");
+        super("Game Page");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
         
         Semaphore nextRound = new Semaphore(0);
         Semaphore roundEnd = new Semaphore(0);
         GameManager gm = new GameManager(this, nextRound, roundEnd);
-        rockPanel = new RockPanel(mainPanel, roundEnd);
-        scorePanel = new ScorePanel(mainPanel, gm);
+        rockPanel = new RockPanel(mainPanel, roundEnd, nextRound);
+        scorePanel = new ScorePanel(gm);
         
         JPanel utilityPanel = new JPanel(new BorderLayout());
         utilityPanel.add(scorePanel, BorderLayout.WEST);
@@ -452,10 +452,11 @@ class RockPanel extends JPanel implements Runnable {
     private JLabel remainingRocksLabel;
     private MainPanel mainPanel;
     Semaphore roundEnd;
-    public RockPanel(MainPanel mainPanel, Semaphore roundEnd) {
-        setBackground(Color.LIGHT_GRAY);
+    Semaphore nextRound;
+    public RockPanel(MainPanel mainPanel, Semaphore roundEnd, Semaphore nextRound) {
         this.mainPanel = mainPanel;
         this.roundEnd = roundEnd;
+        this.nextRound = nextRound;
 
         remainingRocksLabel = new JLabel(mainPanel.rockCells.size() + "");
         remainingRocksLabel.setFont(new Font("TimesRoman", Font.BOLD, 20));
@@ -472,7 +473,7 @@ class RockPanel extends JPanel implements Runnable {
                 remainingRocksLabel.setText("Remaining Rocks: " + (MainPanel.maxRocks - mainPanel.rockCells.size()));
                 if (roundEnd.tryAcquire()) {
                     remainingRocksLabel.setText("");
-                    break;
+                    nextRound.acquire();
                 }
             }
             catch (Exception e) {
@@ -484,12 +485,9 @@ class RockPanel extends JPanel implements Runnable {
 
 class ScorePanel extends JPanel implements Runnable {
     private JLabel label;
-    private MainPanel mainPanel;
     private GameManager gm;
-    public ScorePanel(MainPanel mainPanel, GameManager gm) {
+    public ScorePanel(GameManager gm) {
         setLayout(null);
-        setBackground(Color.LIGHT_GRAY);
-        this.mainPanel = mainPanel;
         this.gm = gm;
         label = new JLabel("Score: " + gm.score);
         label.setFont(new Font("TimesRoman", Font.BOLD, 20));
@@ -517,9 +515,9 @@ class TimerPanel extends JPanel implements Runnable {
     private JLabel label;
     private int timer = 5;
     public TimerPanel() {
-        setBackground(Color.GRAY);
         label = new JLabel(timer + "");
         label.setFont(new Font("TimesRoman", Font.ITALIC, 50));
+        label.setForeground(Color.RED);
         label.setHorizontalAlignment((JLabel.CENTER));
         add(label);
     }
@@ -552,7 +550,8 @@ class MidPanel extends JPanel {
         add(nextRoundButton);
         nextRoundButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                nextRound.release();
+                nextRound.release(2);
+                System.out.println(nextRound.availablePermits());
                 System.out.println("PRESSED BUTTON");
             }
         });
